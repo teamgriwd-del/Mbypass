@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import api from "../api/client";
 import type { AnomalyResult } from "../api/types";
 import RiskBadge from "../components/RiskBadge";
@@ -17,11 +18,14 @@ export default function AnalyzeFeeder() {
     setError("");
     setResults(null);
     try {
-      const r = await api.post<AnomalyResult[]>(`/feeders/${feederId}/analyze`);
+      const r = await api.post<AnomalyResult[]>(`/feeders/${feederId.trim().toUpperCase()}/analyze`);
       setResults(r.data.sort((a, b) => b.risk_score - a.risk_score));
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(msg ?? "Analysis failed");
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.detail ?? err.message ?? "Analysis failed");
+      } else {
+        setError("Unexpected error — check the console");
+      }
     } finally {
       setLoading(false);
     }
@@ -98,7 +102,7 @@ export default function AnalyzeFeeder() {
                   <td className="px-4 py-3">
                     {(r.risk_level === "high" || r.risk_level === "critical") && (
                       <button
-                        onClick={() => navigate(`/cases?meter_id=${r.meter_id}`)}
+                        onClick={() => navigate(`/cases?meter_id=${r.meter_id}&show=new`)}
                         className="text-xs bg-brand-600 text-white px-2 py-1 rounded hover:bg-brand-700"
                       >
                         Open Case

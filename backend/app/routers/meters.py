@@ -1,10 +1,12 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.models import Meter, MeterReading, MeterStatus
+from app.models import Meter, MeterReading, MeterStatus, VALID_METER_TRANSITIONS
 from app.schemas import MeterCreate, MeterOut, MeterReadingCreate, MeterReadingOut
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/meters", tags=["meters"])
 
 
@@ -33,6 +35,7 @@ async def create_meter(payload: MeterCreate, db: AsyncSession = Depends(get_db))
     db.add(meter)
     await db.commit()
     await db.refresh(meter)
+    logger.info("Meter created: %s (account=%s)", meter.meter_serial, meter.account_number)
     return meter
 
 
@@ -49,9 +52,17 @@ async def flag_meter(meter_id: int, db: AsyncSession = Depends(get_db)):
     meter = await db.get(Meter, meter_id)
     if not meter:
         raise HTTPException(status_code=404, detail="Meter not found")
+    allowed = VALID_METER_TRANSITIONS.get(meter.status.value, set())
+    if MeterStatus.flagged.value not in allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot flag meter with current status '{meter.status}'. "
+                   f"Allowed transitions: {sorted(allowed) or 'none'}",
+        )
     meter.status = MeterStatus.flagged
     await db.commit()
     await db.refresh(meter)
+    logger.info("Meter %s manually flagged", meter.meter_serial)
     return meter
 
 

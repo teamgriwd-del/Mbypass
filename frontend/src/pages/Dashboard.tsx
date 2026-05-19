@@ -23,11 +23,29 @@ function StatCard({ icon: Icon, label, value, color }: {
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [ntl, setNtl] = useState<FeederNTL[]>([]);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get<DashboardStats>("/dashboard/stats").then((r) => setStats(r.data));
-    api.get<FeederNTL[]>("/dashboard/feeders/ntl-summary").then((r) => setNtl(r.data));
+    Promise.all([
+      api.get<DashboardStats>("/dashboard/stats"),
+      api.get<FeederNTL[]>("/dashboard/feeders/ntl-summary"),
+    ])
+      .then(([statsRes, ntlRes]) => {
+        setStats(statsRes.data);
+        setNtl(ntlRes.data);
+      })
+      .catch(() => setError("Failed to load dashboard. Is the backend running?"));
   }, []);
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+          {error}
+        </div>
+      </div>
+    );
+  }
 
   if (!stats) {
     return <div className="p-8 text-gray-400">Loading dashboard...</div>;

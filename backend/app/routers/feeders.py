@@ -1,13 +1,14 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import FeederRecord
-from app.schemas import FeederRecordCreate, FeederRecordOut
+from app.schemas import FeederRecordCreate, FeederRecordOut, AnomalyResult
 from app.services.anomaly import compute_feeder_ntl, score_meters_in_feeder
-from app.schemas import AnomalyResult
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/feeders", tags=["feeders"])
 
 
@@ -27,9 +28,14 @@ async def submit_feeder_record(payload: FeederRecordCreate, db: AsyncSession = D
     db.add(record)
     await db.commit()
     await db.refresh(record)
+    logger.info("Feeder %s NTL=%.1f%%", payload.feeder_id, ntl_percent)
 
     # Auto-trigger anomaly scoring when NTL exceeds threshold
     if ntl_percent >= settings.ntl_alert_threshold:
+        logger.warning(
+            "Feeder %s NTL %.1f%% exceeds threshold %.1f%% — running anomaly scan",
+            payload.feeder_id, ntl_percent, settings.ntl_alert_threshold,
+        )
         await score_meters_in_feeder(payload.feeder_id, db)
 
     return record
@@ -50,4 +56,4 @@ async def analyze_feeder(feeder_id: str, db: AsyncSession = Depends(get_db)):
     results = await score_meters_in_feeder(feeder_id, db)
     if not results:
         raise HTTPException(status_code=404, detail="No meters found for this feeder")
-    return results
+    return results  # already sorted by risk_score desc in score_meters_in_feeder

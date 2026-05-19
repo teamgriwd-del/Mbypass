@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/client";
-import type { Case, CaseStatus, Meter, RiskLevel } from "../api/types";
+import type { Case, CaseStatus, RiskLevel } from "../api/types";
 import RiskBadge from "../components/RiskBadge";
 import StatusBadge from "../components/StatusBadge";
 
@@ -11,20 +11,33 @@ function NewCaseForm({ onCreated }: { onCreated: () => void }) {
   const [riskLevel, setRiskLevel] = useState<RiskLevel>("medium");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    await api.post("/cases", { meter_id: Number(meterId), risk_level: riskLevel, description });
-    setLoading(false);
-    onCreated();
-    navigate("/cases");
+    setError("");
+    try {
+      await api.post("/cases", { meter_id: Number(meterId), risk_level: riskLevel, description });
+      onCreated();
+      navigate("/cases");
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        "Failed to create case";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <form onSubmit={submit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-4 max-w-lg">
       <h3 className="font-semibold text-gray-700">Open New Case</h3>
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>
+      )}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Meter ID</label>
         <input required value={meterId} onChange={(e) => setMeterId(e.target.value)}
@@ -62,15 +75,20 @@ export default function Cases() {
   const [cases, setCases] = useState<Case[]>([]);
   const [statusFilter, setStatusFilter] = useState<CaseStatus | "">("");
   const [showNew, setShowNew] = useState(false);
+  const [error, setError] = useState("");
   const [params] = useSearchParams();
 
-  const load = () => {
+  const load = useCallback(() => {
     const p: Record<string, string> = {};
     if (statusFilter) p.status = statusFilter;
-    api.get<Case[]>("/cases", { params: p }).then((r) => setCases(r.data));
-  };
+    api
+      .get<Case[]>("/cases", { params: p })
+      .then((r) => { setCases(r.data); setError(""); })
+      .catch(() => setError("Failed to load cases"));
+  }, [statusFilter]);
 
-  useEffect(load, [statusFilter]);
+  useEffect(() => { load(); }, [load]);
+
   useEffect(() => {
     if (params.get("meter_id")) setShowNew(true);
   }, [params]);
@@ -87,6 +105,10 @@ export default function Cases() {
           + New Case
         </button>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">{error}</div>
+      )}
 
       {showNew && <NewCaseForm onCreated={load} />}
 

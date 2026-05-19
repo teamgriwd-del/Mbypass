@@ -24,6 +24,13 @@ CUSTOMERS = [
 async def seed():
     await init_db()
     async with AsyncSessionLocal() as db:
+        # Skip if already seeded
+        from sqlalchemy import select, func
+        count = (await db.execute(select(func.count(Meter.id)))).scalar()
+        if count and count > 0:
+            print(f"Database already has {count} meters — skipping seed.")
+            return
+
         meters = []
         for i, (name, address) in enumerate(CUSTOMERS * 2):
             serial = f"MTR-{2024000 + i:07d}"

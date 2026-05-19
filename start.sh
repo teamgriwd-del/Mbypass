@@ -10,11 +10,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 echo "==> Seeding demo data..."
-sleep 2
+sleep 3
 python seed.py
 
 echo "==> Installing frontend dependencies..."
 cd ../frontend
+
 npm install --silent
 
 echo "==> Starting frontend..."
